@@ -134,8 +134,8 @@ class RotatingProxyMiddleware(object):
                 if proxy is None:
                     logger.error("No proxies available even after a reset.")
                     raise CloseSpider("no_proxies_after_reset")
-
         request.meta['proxy'] = proxy
+        request.meta['full_proxy'] = proxy
         request.meta['download_slot'] = self.get_proxy_slot(proxy)
         request.meta['_rotating_proxy'] = True
 
@@ -155,20 +155,27 @@ class RotatingProxyMiddleware(object):
         return self._handle_result(request, spider) or response
 
     def _handle_result(self, request, spider):
-        proxy = self.proxies.get_proxy(request.meta.get('proxy', None))
+        proxy = request.meta.get('full_proxy', None)
         if not (proxy and request.meta.get('_rotating_proxy')):
             return
-        self.stats.set_value('proxies/unchecked', len(self.proxies.unchecked) - len(self.proxies.reanimated))
-        self.stats.set_value('proxies/reanimated', len(self.proxies.reanimated))
-        self.stats.set_value('proxies/mean_backoff', self.proxies.mean_backoff_time)
         ban = request.meta.get('_ban', None)
         if ban is True:
             self.proxies.mark_dead(proxy)
             self.stats.set_value('proxies/dead', len(self.proxies.dead))
-            return self._retry(request, spider)
         elif ban is False:
             self.proxies.mark_good(proxy)
             self.stats.set_value('proxies/good', len(self.proxies.dead))
+
+        self.stats.set_value(
+            'proxies/unchecked',
+            len(self.proxies.unchecked) - len(self.proxies.reanimated))
+        self.stats.set_value('proxies/reanimated',
+                            len(self.proxies.reanimated))
+        self.stats.set_value('proxies/mean_backoff',
+                            self.proxies.mean_backoff_time)
+
+        if ban is True:
+            return self._retry(request, spider)
 
     def _retry(self, request, spider):
         retries = request.meta.get('proxy_retry_times', 0) + 1
@@ -220,19 +227,19 @@ class BanDetectionMiddleware(object):
 
     By default, client is considered banned if a request failed, and alive
     if a response was received. You can override ban detection method by
-    passing a path to a custom BanDectionPolicy in 
+    passing a path to a custom BanDectionPolicy in
     ``ROTATING_PROXY_BAN_POLICY``, e.g.::
-      
+
     ROTATING_PROXY_BAN_POLICY = 'myproject.policy.MyBanPolicy'
-    
-    The policy must be a class with ``response_is_ban``  
-    and ``exception_is_ban`` methods. These methods can return True 
+
+    The policy must be a class with ``response_is_ban``
+    and ``exception_is_ban`` methods. These methods can return True
     (ban detected), False (not a ban) or None (unknown). It can be convenient
     to subclass and modify default BanDetectionPolicy::
-        
+
         # myproject/policy.py
         from rotating_proxies.policy import BanDetectionPolicy
-        
+
         class MyPolicy(BanDetectionPolicy):
             def response_is_ban(self, request, response):
                 # use default rules, but also consider HTTP 200 responses
@@ -240,12 +247,12 @@ class BanDetectionMiddleware(object):
                 ban = super(MyPolicy, self).response_is_ban(request, response)
                 ban = ban or b'captcha' in response.body
                 return ban
-                
+
             def exception_is_ban(self, request, exception):
                 # override method completely: don't take exceptions in account
                 return None
-        
-    Instead of creating a policy you can also implement ``response_is_ban`` 
+
+    Instead of creating a policy you can also implement ``response_is_ban``
     and ``exception_is_ban`` methods as spider methods, for example::
 
         class MySpider(scrapy.Spider):
@@ -256,7 +263,7 @@ class BanDetectionMiddleware(object):
 
             def exception_is_ban(self, request, exception):
                 return None
-     
+
     """
     def __init__(self, stats, policy):
         self.stats = stats

@@ -7,7 +7,6 @@ import math
 
 import attr
 
-from .utils import extract_proxy_hostport
 
 logger = logging.getLogger(__name__)
 
@@ -34,10 +33,6 @@ class Proxies(object):
     """
     def __init__(self, proxy_list, backoff=None):
         self.proxies = {url: ProxyState() for url in proxy_list}
-        self.proxies_by_hostport = {
-            extract_proxy_hostport(proxy): proxy
-            for proxy in self.proxies
-        }
         self.unchecked = set(self.proxies.keys())
         self.good = set()
         self.dead = set()
@@ -52,17 +47,6 @@ class Proxies(object):
         if not available:
             return None
         return random.choice(available)
-
-    def get_proxy(self, proxy_address):
-        """
-        Return complete proxy name associated with a hostport of a given
-        ``proxy_address``. If ``proxy_address`` is unkonwn or empty,
-        return None.
-        """
-        if not proxy_address:
-            return None
-        hostport = extract_proxy_hostport(proxy_address)
-        return self.proxies_by_hostport.get(hostport, None)
 
     def mark_dead(self, proxy, _time=None):
         """ Mark a proxy as dead """

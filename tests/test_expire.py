@@ -3,37 +3,21 @@ from rotating_proxies.expire import Proxies, exp_backoff
 
 
 def test_proxies():
-    proxy_list = ['foo', 'bar', 'baz']
+    proxy_list = ['foo', 'bar', 'http://user-id-session-id:pwd@baz.com:22225']
     p = Proxies(proxy_list)
     proxy = p.get_random()
     assert proxy in proxy_list
 
-    proxy = p.get_proxy('foo')
-    assert proxy in proxy_list
-    proxy = p.get_proxy('wom')
-    assert not proxy
-
     p.mark_dead('bar')
-    p.mark_dead('baz')
-
-    assert p.get_random() == 'foo'
-
     p.mark_dead('foo')
+
+    assert p.get_random() == 'http://user-id-session-id:pwd@baz.com:22225'
+
+    p.mark_dead('http://user-id-session-id:pwd@baz.com:22225')
     assert p.get_random() is None
 
     p.mark_good('bar')
     assert p.get_random() == 'bar'
-
-
-def test_auth_proxies():
-    proxy_list = ['http://foo:bar@baz:1234', 'http://egg:1234']
-    p = Proxies(proxy_list)
-
-    proxy = p.get_proxy('http://baz:1234')
-    assert proxy in proxy_list
-
-    proxy = p.get_proxy('http://egg:1234')
-    assert proxy in proxy_list
 
 
 def test_reanimate_reset():
